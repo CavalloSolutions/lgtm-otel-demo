@@ -1,0 +1,113 @@
+x-logging:
+  &loki-logging
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/api/prom/push'
+
+services:
+  grafana:
+    image: grafana/grafana
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./grafana/dashboards:/etc/grafana/dashboards
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    ports:
+      - 3000:3000
+    logging: *loki-logging
+
+  loki:
+    image: grafana/loki
+    command:
+      - -config.file=/etc/loki/local-config.yaml
+      - -table-manager.retention-period=1d
+      - -table-manager.retention-deletes-enabled=true
+    ports:
+      - "3100:3100"
+    logging: *loki-logging
+
+  tempo:
+    image: grafana/tempo
+    command:
+      - --target=all
+      - --storage.trace.backend=local
+      - --storage.trace.local.path=/var/tempo
+      - --auth.enabled=false
+      - --compactor.compaction.block-retention=24h
+    ports:
+      - "8004:80"
+    depends_on:
+      - prometheus
+    logging: *loki-logging
+
+  prometheus:
+    image: quay.io/prometheus/prometheus
+    command:
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --storage.tsdb.retention.time=1h
+      - --config.file=/etc/prometheus/prometheus-config.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
+    ports:
+      - "9090:9090"
+    logging: *loki-logging
+
+  otel:
+    image: otel/opentelemetry-collector-contrib
+    command: [ "--config=/etc/otel-config.yml" ]
+    volumes:
+      - ./otel/otel-config.yml:/etc/otel-config.yml
+    ports:
+      - 8888:8888 # Prometheus metrics exposed by the collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    logging: *loki-logging
+
+  sql-server:
+    image: mcr.microsoft.com/mssql/server
+    restart: unless-stopped
+    ports:
+      - 63348:1433
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=password123*
+      - MSSQL_AGENT_ENABLED=True
+    logging: *loki-logging
+
+  app:
+    build:
+      context: ./DemoService
+      dockerfile: ./DemoService/Dockerfile
+    ports:
+      - "8081:80"
+    environment:
+      - OTLP_URL=http://otel:4317
+      - SQL_HOST=sql-server
+      - SQL_USER=sa
+      - SQL_PASSWORD=password123*
+    depends_on:
+      - sql-server
+      - otel
+
+  loadgen:
+    build:
+      context: ./loadgen
+    environment:
+      - DEMO_SERVICE_URL=http://app/otel-demo
+      - WORKER_COUNT=2
+    depends_on:
+      - app

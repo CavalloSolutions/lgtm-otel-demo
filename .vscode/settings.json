@@ -1,0 +1,8 @@
+{
+    "omnisharp.dotNetCliPaths": [
+        "/home/josh/.dotnet"
+    ],
+    "omnisharp.dotnetPath": "/home/josn/.dotnet",
+    "omnisharp.sdkPath": "/home/josh/.dotnet",
+    "editor.formatOnSave": true
+}
