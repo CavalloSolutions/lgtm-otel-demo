@@ -1,24 +1,20 @@
 global:
-  scrape_interval:     15s
+  scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'monitoring/grafana'
-    static_configs:
-    - targets: ['grafana:3000']
-  - job_name: 'monitoring/prometheus'
-    static_configs:
-    - targets: ['localhost:9090']
-  - job_name: 'monitoring/loki'
-    static_configs:
-    - targets: ['loki:3100']
-  - job_name: 'monitoring/tempo'
-    static_configs:
-    - targets: ['tempo:80']
-  - job_name: monitoring/otel
-    scrape_interval: 5s
-    static_configs:
-    - targets:
-      - otel:8888
-      - otel:8889
-
+  - job_name: docker-containters
+    honor_labels: true
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_prometheus_io_scrape]
+        separator: ;
+        regex: "true"
+        replacement: $1
+        action: keep
+      - source_labels:
+          [__address__, __meta_docker_container_label_prometheus_io_port]
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        target_label: __address__
+        replacement: $1:$2
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock

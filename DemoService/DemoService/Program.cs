@@ -138,6 +138,7 @@ public partial class Program
         {
             r.AddService(
                 serviceName: serviceName,
+                serviceNamespace: "demo",
                 serviceVersion: serviceVersion,
                 serviceInstanceId: Environment.MachineName);
         }

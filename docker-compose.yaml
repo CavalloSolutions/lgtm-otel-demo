@@ -5,6 +5,7 @@ x-logging:
     loki-url: 'http://localhost:3100/api/prom/push'
 
 services:
+
   grafana:
     image: grafana/grafana
     volumes:
@@ -41,10 +42,14 @@ services:
       - "8004:80"
     depends_on:
       - prometheus
+    labels:
+      - namespace=monitoring
+      - prometheus.io/scrape=true
     logging: *loki-logging
 
   prometheus:
     image: quay.io/prometheus/prometheus
+    user: root
     command:
       - --web.console.templates=/etc/prometheus/consoles
       - --web.console.libraries=/etc/prometheus/console_libraries
@@ -56,8 +61,11 @@ services:
       - --enable-feature=exemplar-storage
     volumes:
       - ./prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "9090:9090"
+    labels:
+      - namespace=monitoring
     logging: *loki-logging
 
   otel:
@@ -66,11 +74,14 @@ services:
     volumes:
       - ./otel/otel-config.yml:/etc/otel-config.yml
     ports:
-      - 8888:8888 # Prometheus metrics exposed by the collector
-      - 8889:8889 # Prometheus exporter metrics
+      - 8889:8889 # Prometheus
       - 13133:13133 # health_check extension
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
+    labels:
+      - namespace=monitoring
+      - prometheus.io/scrape=true
+      - prometheus.io/port=8889
     depends_on:
       - prometheus
       - tempo
@@ -89,6 +100,7 @@ services:
     logging: *loki-logging
 
   app:
+    restart: unless-stopped
     build:
       context: ./DemoService
       dockerfile: ./DemoService/Dockerfile
@@ -102,8 +114,8 @@ services:
     depends_on:
       - sql-server
       - otel
-
   loadgen:
+    restart: unless-stopped
     build:
       context: ./loadgen
     environment:

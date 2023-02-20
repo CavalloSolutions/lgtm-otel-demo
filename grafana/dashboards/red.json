@@ -112,7 +112,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (operation)(rate(otel_calls_total{operation=\"/otel-demo\"}[$__interval]))",
+          "expr": "sum by (operation)(rate(calls_total{operation=\"/otel-demo\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -206,7 +206,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.99, sum(rate(otel_latency_bucket{operation=\"HTTP GET\", http_url=\"http://example.com\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(.99, sum(rate(latency_bucket{operation=\"HTTP GET\", http_url=\"http://example.com\"}[$__rate_interval])) by (le))",
           "legendFormat": "GET example.com",
           "range": true,
           "refId": "A"
@@ -316,7 +316,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (operation) (rate(otel_calls_total{operation=\"/otel-demo\", status_code=\"STATUS_CODE_ERROR\"}[$__interval]))",
+          "expr": "sum by (operation) (rate(calls_total{operation=\"/otel-demo\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -433,7 +433,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.99, sum(rate(otel_latency_bucket{operation=\"oteldemodb\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(.99, sum(rate(latency_bucket{operation=\"oteldemodb\"}[$__rate_interval])) by (le))",
           "legendFormat": "oteldemodb",
           "range": true,
           "refId": "A"
@@ -527,7 +527,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(.99, sum(rate(otel_latency_bucket{operation=\"/otel-demo\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(.99, sum(rate(latency_bucket{operation=\"/otel-demo\"}[$__rate_interval])) by (le))",
           "legendFormat": "/otel-demo",
           "range": true,
           "refId": "A"
@@ -590,7 +590,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "otel_arbitary_count_total",
+          "expr": "arbitary_count_total",
           "legendFormat": "{{service_name}}",
           "range": true,
           "refId": "A"
@@ -608,7 +608,7 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
