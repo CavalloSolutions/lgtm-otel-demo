@@ -1,0 +1,136 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+// METRICS SERVICE
+prometheus.relabel "metrics_service" {
+	rule {
+		source_labels = ["cluster"]
+		regex         = ""
+		replacement   = coalesce(env("CLUSTER_NAME"), "dev")
+		target_label  = "cluster"
+	}
+	forward_to = [prometheus.remote_write.metrics_service.receiver]
+}
+
+prometheus.remote_write "metrics_service" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+// LOGS SERVICE
+loki.process "logs_service" {
+	stage.static_labels {
+		values = {
+			cluster = coalesce(env("CLUSTER_NAME"), "dev"),
+		}
+	}
+	forward_to = [loki.write.logs_service.receiver]
+}
+
+loki.write "logs_service" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
+
+// TRACES SERVICE
+otelcol.exporter.otlp "traces_service" {
+	client {
+		endpoint = "http://tempo:4317"
+		tls {
+            insecure = true
+        }
+	}
+}
+
+// OTEL CONVERTERS
+otelcol.exporter.prometheus "metrics_converter" {
+	forward_to = [prometheus.relabel.metrics_service.receiver]
+}
+
+otelcol.exporter.loki "logs_converter" {
+	forward_to = [loki.process.logs_service.receiver]
+}
+
+// OTEL RECEIVER
+otelcol.receiver.otlp "default" {
+	grpc {
+		// default
+		// endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		// default
+		// endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.processor.filter.default.input]
+		logs    = [otelcol.processor.filter.default.input]
+		traces  = [otelcol.processor.filter.default.input]
+	}
+}
+
+otelcol.processor.filter "default" {
+	error_mode = "ignore"
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.batch.default.input, otelcol.processor.transform.spanmetrics.input]
+	}
+}
+
+otelcol.processor.transform "spanmetrics" {
+	error_mode = "ignore"
+
+	trace_statements {
+		context    = "resource"
+		statements = [
+			`keep_keys(attributes, ["service.name", "special.attr"])`,
+		]
+	}
+
+	output {
+		traces = [otelcol.connector.spanmetrics.default.input]
+	}
+}
+
+otelcol.connector.spanmetrics "default" {
+	metrics_flush_interval = "60s"
+
+	dimension {
+		name = "http.status_code"
+	}
+
+    dimension {
+		name = "http.route"
+	}
+
+	histogram {
+		unit = "s"
+
+		explicit {
+			buckets = ["10ms", "50ms", "100ms", "200ms", "300ms", "500ms", "1s", "2s", "5s"]
+		}
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	send_batch_size     = 16384
+	send_batch_max_size = 0
+	timeout             = "2s"
+
+	output {
+		metrics = [otelcol.exporter.prometheus.metrics_converter.input]
+		logs    = [otelcol.exporter.loki.logs_converter.input]
+		traces  = [otelcol.exporter.otlp.traces_service.input]
+	}
+}

@@ -3,6 +3,9 @@ x-logging:
   driver: loki
   options:
     loki-url: 'http://localhost:3100/api/prom/push'
+    mode: non-blocking
+    max-buffer-size: 4m
+    loki-retries: "3"
 
 services:
 
@@ -68,58 +71,51 @@ services:
       - namespace=monitoring
     logging: *loki-logging
 
-  otel:
-    image: otel/opentelemetry-collector-contrib
-    command: [ "--config=/etc/otel-config.yml" ]
+  alloy:
+    image: grafana/alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
     volumes:
-      - ./otel/otel-config.yml:/etc/otel-config.yml
+      - ./alloy/config.alloy:/etc/alloy/config.alloy
     ports:
-      - 8889:8889 # Prometheus
-      - 13133:13133 # health_check extension
-      - 4317:4317 # OTLP gRPC receiver
-      - 4318:4318 # OTLP http receiver
-    labels:
-      - namespace=monitoring
-      - prometheus.io/scrape=true
-      - prometheus.io/port=8889
-    depends_on:
-      - prometheus
-      - tempo
-      - loki
+      - 12345:12345
     logging: *loki-logging
 
-  sql-server:
-    image: mcr.microsoft.com/mssql/server
-    restart: unless-stopped
+  locust:
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
     ports:
-      - 63348:1433
+      - 8089:8089
+    volumes:
+      - ./locust:/mnt/locust
+    command: 
+      - -f 
+      - /mnt/locust/locustfile.py 
+      - -H 
+      - http://demo-api:8080
+      - --autostart
+      - --users=10
     environment:
-      - ACCEPT_EULA=Y
-      - SA_PASSWORD=password123*
-      - MSSQL_AGENT_ENABLED=True
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=locust
+    depends_on:
+      - demo-api
     logging: *loki-logging
 
-  app:
+  demo-api:
     restart: unless-stopped
     build:
-      context: ./DemoService
-      dockerfile: ./DemoService/Dockerfile
+      context: ./demo-api
+      dockerfile: Dockerfile
     ports:
-      - "8081:80"
+      - 8080:8080
     environment:
-      - OTLP_URL=http://otel:4317
-      - SQL_HOST=sql-server
-      - SQL_USER=sa
-      - SQL_PASSWORD=password123*
-    depends_on:
-      - sql-server
-      - otel
-  loadgen:
-    restart: unless-stopped
-    build:
-      context: ./loadgen
-    environment:
-      - DEMO_SERVICE_URL=http://app/otel-demo
-      - WORKER_COUNT=2
-    depends_on:
-      - app
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=demo-api
+      - OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_SERVER_REQUEST=.*
+      - CACHE_TTL=1
+    logging: *loki-logging

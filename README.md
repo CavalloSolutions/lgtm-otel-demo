@@ -1,3 +1,5 @@
+# **OUT OF DATE**
+
 ## Overview
 
 The purpose of this repository is to demonstrate how we could use the OpenTelemetry Collector with the Grafana LGTM stack to collect, correlate, and visualize our application's logs, traces and metrics. It uses a simple load generator against a .Net web service that has been instrumented with the [OpenTelemetry SDK](https://opentelemetry.io/docs/instrumentation/net/).
